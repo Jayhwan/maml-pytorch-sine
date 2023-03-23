@@ -1,3 +1,4 @@
+import logging
 
 import numpy as np
 
@@ -13,3 +14,9 @@ def simplex_proj(beta):
 
     lam = (1-np.sum(beta_sorted[:rho]))/(rho)
     return np.maximum(beta + lam,0)
+
+def get_logger(filename, mode='w'):
+    logging.basicConfig(level=logging.INFO, format='%(message)s')
+    logger = logging.getLogger()
+    logger.addHandler(logging.FileHandler(filename, mode=mode))
+    return logger

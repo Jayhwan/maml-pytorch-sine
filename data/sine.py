@@ -31,7 +31,7 @@ class SINE():
                 if random.random() < 0.95:
                     amplitude.append(np.random.uniform(self.amplitude_min, self.amplitude_min+0.95))
                 else:
-                    amplitude.append(np.random.uniform(self.amplitude_max - 0.05, self.amplitude_max))
+                    amplitude.append(np.random.uniform(self.amplitude_max-0.05, self.amplitude_max))
             amplitude = np.array(amplitude).reshape(-1, 1)    
         else:
             amplitude = np.random.uniform(self.amplitude_min, self.amplitude_max, 

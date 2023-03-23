@@ -1,4 +1,5 @@
 from copy import deepcopy
+from os.path import join as pjoin
 
 import numpy as np
 import torch
@@ -7,7 +8,7 @@ import torch.optim as optim
 import matplotlib.pyplot as plt
 
 from data.sine import SINE
-from utils import simplex_proj
+from utils import simplex_proj, get_logger
 from models.building_blocks import MLP
 
 
@@ -39,6 +40,8 @@ class MAML():
         
         # logdir
         self.results_path = results_path
+        log_path = pjoin(results_path, "execution.log")
+        self.logger = get_logger(log_path)
 
     def inner_loop(self, X, y):
         X_train, X_test = X[:self.K], X[self.K:]
@@ -58,9 +61,12 @@ class MAML():
     
     def train_log(self, epoch_loss, iteration, num_iterations):
         epoch_loss = np.array(epoch_loss)
-        print(f"{iteration}/{num_iterations}", end="\t")
-        print(f"MSE(mean): {np.mean(epoch_loss):.4f}\tMSE(worst): {np.max(epoch_loss):.4f}", end="\t")
-        print(f"MSE(std): {np.std(epoch_loss):.4f}\tMSE(Top 90%): {np.mean(np.sort(epoch_loss)[:int(0.9*self.tasks_per_meta_batch)]):.4f}")
+        self.logger.info(f"{iteration}/{num_iterations}")
+        self.logger.info(f"MSE(mean): {np.mean(epoch_loss):.4f}\tMSE(worst): {np.max(epoch_loss):.4f}")
+        self.logger.info(f"MSE(std): {np.std(epoch_loss):.4f}\tMSE(Top 90%): {np.mean(np.sort(epoch_loss)[:int(0.9*self.tasks_per_meta_batch)]):.4f}")
+        # print(f"{iteration}/{num_iterations}", end="\t")
+        # print(f"MSE(mean): {np.mean(epoch_loss):.4f}\tMSE(worst): {np.max(epoch_loss):.4f}", end="\t")
+        # print(f"MSE(std): {np.std(epoch_loss):.4f}\tMSE(Top 90%): {np.mean(np.sort(epoch_loss)[:int(0.9*self.tasks_per_meta_batch)]):.4f}")
     
     def train(self, num_iterations):
         epoch_loss = []
@@ -90,18 +96,23 @@ class MAML():
     def evaluate(self, num_tasks, K=5, n_steps=5, lr=0.001):
         losses = []
 
-        X, y = self.task.sample_data(num_tasks, K, mode="test")
+        test_loss = 0.0
+        X, y = self.task.sample_data(num_tasks, 2*K, mode="test")
         for i in range(num_tasks):
             model = deepcopy(self.model)
             optimizer = optim.Adam(model.parameters(), lr=lr)
 
             for step in range(n_steps):
                 optimizer.zero_grad()
-                loss = self.criterion(model(X[i]), y[i])
+                loss = self.criterion(model(X[i, :K]), y[i, :K])
                 loss.backward()
                 optimizer.step()
             
-            losses.append(self.criterion(model(X[i]), y[i]).item())
+            # losses.append(self.criterion(model(X[i, K:]), y[i, K:]).item())
+            test_loss += self.criterion(model(X[i, K:]), y[i, K:]).item()
+            if (i+1) % self.tasks_per_meta_batch == 0:
+                losses.append(test_loss / self.tasks_per_meta_batch)
+                test_loss = 0.0
 
         losses = np.array(losses)
         results = {}
@@ -110,8 +121,9 @@ class MAML():
         results["mse_loss_std"] = np.std(losses)
         results["mse_loss_90percentile"] = np.mean(np.sort(losses)[:int(0.9*num_tasks)])
         for k, v in results.items():
-            print(f"{k}:\t{v:.2f}")
-        return results
+            # print(f"{k}:\t{v:.2f}")
+            self.logger.info(f"{k}:\t{v:.2f}")
+        np.save(f"{self.results_path}/performance.npy", losses)
     
     def plot(self, num_tasks, K=5, n_steps=5, lr=0.01):
         X, y = self.task.sample_data(batch_size=num_tasks, mode="plot")

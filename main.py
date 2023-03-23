@@ -33,9 +33,10 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
 
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
+    seed = int(args.seed)
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
     
     results_path = pjoin(args.logdir, args.task_name, args.algo_name, args.exp_id)
     if not os.path.isdir(results_path):
@@ -65,5 +66,5 @@ if __name__ == "__main__":
         raise NotImplementedError
     
     algo.train(args.num_iterations)
-    algo.evaluate(args.num_eval_tasks)
+    algo.evaluate(args.num_eval_tasks, n_steps=args.inner_steps)
     algo.plot(args.num_plot_tasks)
