@@ -63,7 +63,7 @@ class MAML():
         epoch_loss = np.array(epoch_loss)
         self.logger.info(f"{iteration}/{num_iterations}")
         self.logger.info(f"MSE(mean): {np.mean(epoch_loss):.4f}\tMSE(worst): {np.max(epoch_loss):.4f}")
-        self.logger.info(f"MSE(std): {np.std(epoch_loss):.4f}\tMSE(Top 90%): {np.mean(np.sort(epoch_loss)[:int(0.9*self.tasks_per_meta_batch)]):.4f}")
+        self.logger.info(f"MSE(std): {np.std(epoch_loss):.4f}\tMSE(Top 90%): {np.mean(np.sort(epoch_loss)[:int(0.9*self.print_every)]):.4f}")
         # print(f"{iteration}/{num_iterations}", end="\t")
         # print(f"MSE(mean): {np.mean(epoch_loss):.4f}\tMSE(worst): {np.max(epoch_loss):.4f}", end="\t")
         # print(f"MSE(std): {np.std(epoch_loss):.4f}\tMSE(Top 90%): {np.mean(np.sort(epoch_loss)[:int(0.9*self.tasks_per_meta_batch)]):.4f}")
@@ -119,7 +119,7 @@ class MAML():
         results["mse_loss_avg"] = np.mean(losses)
         results["mse_loss_worst"] = np.max(losses)
         results["mse_loss_std"] = np.std(losses)
-        results["mse_loss_90percentile"] = np.mean(np.sort(losses)[:int(0.9*num_tasks)])
+        results["mse_loss_90percentile"] = np.mean(np.sort(losses)[:int(0.9*num_tasks/self.tasks_per_meta_batch)])
         for k, v in results.items():
             # print(f"{k}:\t{v:.2f}")
             self.logger.info(f"{k}:\t{v:.2f}")

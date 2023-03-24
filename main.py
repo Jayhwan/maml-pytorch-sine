@@ -66,5 +66,5 @@ if __name__ == "__main__":
         raise NotImplementedError
     
     algo.train(args.num_iterations)
-    algo.evaluate(args.num_eval_tasks, n_steps=args.inner_steps)
-    algo.plot(args.num_plot_tasks)
+    algo.evaluate(args.num_eval_tasks, K=args.K, n_steps=args.inner_steps, lr=args.inner_lr)
+    algo.plot(args.num_plot_tasks, K=args.K, n_steps=args.inner_steps, lr=args.inner_lr)
