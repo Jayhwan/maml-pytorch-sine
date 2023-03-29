@@ -60,16 +60,16 @@ class MAML():
         return loss
     
     def train_log(self, epoch_loss, iteration, num_iterations):
-        epoch_loss = np.array(epoch_loss)
+        epoch_loss = 0.5 * np.array(epoch_loss)
         self.logger.info(f"{iteration}/{num_iterations}")
         self.logger.info(f"MSE(mean): {np.mean(epoch_loss):.4f}\tMSE(worst): {np.max(epoch_loss):.4f}")
-        self.logger.info(f"MSE(std): {np.std(epoch_loss):.4f}\tMSE(Top 90%): {np.mean(np.sort(epoch_loss)[:int(0.9*self.print_every)]):.4f}")
+        self.logger.info(f"MSE(std): {np.std(epoch_loss):.4f}\tMSE(Top 90%): {np.mean(np.sort(epoch_loss)[:int(0.9*len(epoch_loss))]):.4f}")
         # print(f"{iteration}/{num_iterations}", end="\t")
         # print(f"MSE(mean): {np.mean(epoch_loss):.4f}\tMSE(worst): {np.max(epoch_loss):.4f}", end="\t")
         # print(f"MSE(std): {np.std(epoch_loss):.4f}\tMSE(Top 90%): {np.mean(np.sort(epoch_loss)[:int(0.9*self.tasks_per_meta_batch)]):.4f}")
     
     def train(self, num_iterations):
-        epoch_loss = []
+        losses = []
         for iteration in range(1, num_iterations+1):
 
             # compute meta loss
@@ -77,7 +77,9 @@ class MAML():
             batch_X, batch_y = self.task.sample_data(batch_size=self.tasks_per_meta_batch,
                                                      num_samples=2*self.K, mode="train")
             for i in range(self.tasks_per_meta_batch):
-                meta_loss += self.inner_loop(batch_X[i], batch_y[i])
+                loss = self.inner_loop(batch_X[i], batch_y[i])
+                meta_loss += loss
+                losses.append(loss.item())
             
             # compute meta gradient of loss with respect to maml weights
             meta_grads = torch.autograd.grad(meta_loss, self.weights)
@@ -88,15 +90,15 @@ class MAML():
             self.meta_optimiser.step()
 
             # log metrics
-            epoch_loss.append(meta_loss.item() / self.tasks_per_meta_batch)
+            # epoch_loss.append(meta_loss.item() / self.tasks_per_meta_batch)
             if iteration % self.print_every == 0:
-                self.train_log(epoch_loss, iteration, num_iterations)
-                epoch_loss = []
+                self.train_log(losses, iteration, num_iterations)
+                losses = []
 
     def evaluate(self, num_tasks, K=5, n_steps=5, lr=0.001):
         losses = []
 
-        test_loss = 0.0
+        # test_loss = 0.0
         X, y = self.task.sample_data(num_tasks, 2*K, mode="test")
         for i in range(num_tasks):
             model = deepcopy(self.model)
@@ -108,22 +110,23 @@ class MAML():
                 loss.backward()
                 optimizer.step()
             
-            # losses.append(self.criterion(model(X[i, K:]), y[i, K:]).item())
-            test_loss += self.criterion(model(X[i, K:]), y[i, K:]).item()
-            if (i+1) % self.tasks_per_meta_batch == 0:
-                losses.append(test_loss / self.tasks_per_meta_batch)
-                test_loss = 0.0
+            losses.append(self.criterion(model(X[i, K:]), y[i, K:]).item())
+            # test_loss += self.criterion(model(X[i, K:]), y[i, K:]).item()
+            # if (i+1) % self.tasks_per_meta_batch == 0:
+            #     losses.append(test_loss / self.tasks_per_meta_batch)
+            #     test_loss = 0.0
 
-        losses = np.array(losses)
+        losses = 0.5 * np.array(losses)
         results = {}
         results["mse_loss_avg"] = np.mean(losses)
         results["mse_loss_worst"] = np.max(losses)
         results["mse_loss_std"] = np.std(losses)
-        results["mse_loss_90percentile"] = np.mean(np.sort(losses)[:int(0.9*num_tasks/self.tasks_per_meta_batch)])
+        results["mse_loss_90percentile"] = np.mean(np.sort(losses)[:int(0.9*len(losses))])
         for k, v in results.items():
             # print(f"{k}:\t{v:.2f}")
             self.logger.info(f"{k}:\t{v:.2f}")
         np.save(f"{self.results_path}/performance.npy", losses)
+        # torch.save(f"{self.resuls_path}/maml.pt", self.model)
     
     def plot(self, num_tasks, K=5, n_steps=5, lr=0.01):
         X, y = self.task.sample_data(batch_size=num_tasks, mode="plot")
@@ -184,22 +187,23 @@ class TRMAML(MAML):
         super().__init__(task_name, inner_lr, meta_lr, K, inner_steps, tasks_per_meta_batch, results_path)
         
     def train(self, num_iterations):
-        epoch_loss = []
+        losses = []
         for iteration in range(1, num_iterations+1):
 
             # compute meta loss
-            meta_loss = 0.0
+            # meta_loss = 0.0
             worst_meta_loss = 0.0  
             batch_X, batch_y = self.task.sample_data(batch_size=self.tasks_per_meta_batch,
                                                      num_samples=2*self.K, mode="train")
             for i in range(self.tasks_per_meta_batch):
-                task_loss = self.inner_loop(batch_X[i], batch_y[i])
-                meta_loss += task_loss
-                if task_loss > worst_meta_loss:
-                    worst_meta_loss = task_loss
+                loss = self.inner_loop(batch_X[i], batch_y[i])
+                # meta_loss += task_loss
+                losses.append(loss.item())
+                if loss > worst_meta_loss:
+                    worst_meta_loss = loss
                 # meta_loss += self.inner_loop(batch_X[i], batch_y[i])
             
-            # compute meta gradient of loss with respect to maml weights
+            # compute meta gradient of loss with respect to maml weights 
             meta_grads = torch.autograd.grad(worst_meta_loss, self.weights)
 
             # assign meta gradient to weights and take optimisation step
@@ -208,10 +212,10 @@ class TRMAML(MAML):
             self.meta_optimiser.step()
 
             # log metrics
-            epoch_loss.append(meta_loss.item() / self.tasks_per_meta_batch)
+            # epoch_loss.append(meta_loss.item() / self.tasks_per_meta_batch)
             if iteration % self.print_every == 0:
-                self.train_log(epoch_loss, iteration, num_iterations)
-                epoch_loss = []
+                self.train_log(losses, iteration, num_iterations)
+                losses = []
                 
     def __str__(self):
         return "TR-MAML"    
@@ -224,7 +228,7 @@ class TaroMAML(MAML):
         self.p_lr = p_lr
         
     def train(self, num_iterations):
-        epoch_loss = []
+        losses = []
         p = np.ones(self.tasks_per_meta_batch) / self.tasks_per_meta_batch
         for iteration in range(1, num_iterations+1):
 
@@ -234,10 +238,11 @@ class TaroMAML(MAML):
             batch_X, batch_y = self.task.sample_data(batch_size=self.tasks_per_meta_batch,
                                                      num_samples=2*self.K, mode="train")
             for i in range(self.tasks_per_meta_batch):
-                task_loss = self.inner_loop(batch_X[i], batch_y[i])
-                meta_loss += task_loss
-                p_meta_loss += p[i] * task_loss
-                p[i] -= self.p_lr * p_meta_loss
+                loss = self.inner_loop(batch_X[i], batch_y[i])
+                meta_loss += loss
+                losses.append(loss.item())
+                p_meta_loss += p[i] * loss
+            p[i] += self.p_lr * p_meta_loss
             p = simplex_proj(p)
             
             # compute meta gradient of loss with respect to maml weights
@@ -249,10 +254,10 @@ class TaroMAML(MAML):
             self.meta_optimiser.step()
 
             # log metrics
-            epoch_loss.append(meta_loss.item() / self.tasks_per_meta_batch)
+            # epoch_loss.append(meta_loss.item() / self.tasks_per_meta_batch)
             if iteration % self.print_every == 0:
-                self.train_log(epoch_loss, iteration, num_iterations)
-                epoch_loss = []
+                self.train_log(losses, iteration, num_iterations)
+                losses = []
                 
     def __str__(self):
         return "TaRo-BOBA"
@@ -285,7 +290,7 @@ class VMAML(MAML):
         return temp_weights, loss
         
     def train(self, num_iterations):
-        epoch_loss = []
+        losses = []
         
         for iteration in range(1, num_iterations+1):
             
@@ -313,6 +318,7 @@ class VMAML(MAML):
             for i in range(self.tasks_per_meta_batch):
                 _, loss = self.inner_loop(batch_X[i], batch_y[i], task_weights_list[i], True)
                 meta_loss += loss
+                losses.append(loss.item())
             
             # compute meta gradient of loss with respect to maml weights
             meta_grads = torch.autograd.grad(meta_loss, self.weights)
@@ -323,10 +329,10 @@ class VMAML(MAML):
             self.meta_optimiser.step()
             
            # log metrics
-            epoch_loss.append(meta_loss.item() / self.tasks_per_meta_batch)
+            # epoch_loss.append(meta_loss.item() / self.tasks_per_meta_batch)
             if iteration % self.print_every == 0:
-                self.train_log(epoch_loss, iteration, num_iterations)
-                epoch_loss = []
+                self.train_log(losses, iteration, num_iterations)
+                losses = []
     
     def __str__(self):
         return "VariMAML"

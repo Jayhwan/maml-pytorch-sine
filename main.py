@@ -2,6 +2,7 @@ import os
 from os.path import join as pjoin
 import random
 import argparse
+from datetime import datetime
 
 import yaml
 import torch
@@ -15,11 +16,11 @@ if __name__ == "__main__":
     parser.add_argument("--algo_name", type=str, default="maml")
 
     # Hyperparameters
-    parser.add_argument("--inner_lr", type=float, default=0.005)
+    parser.add_argument("--inner_lr", type=float, default=0.001)
     parser.add_argument("--meta_lr", type=float, default=0.001)
     parser.add_argument("--K", type=int, default=5)
     parser.add_argument("--inner_steps", type=int, default=1)
-    parser.add_argument("--num_iterations", type=int, default=50000)
+    parser.add_argument("--num_iterations", type=int, default=70000)
     parser.add_argument("--num_eval_tasks", type=int, default=5000)
     parser.add_argument("--num_plot_tasks", type=int, default=5)
 
@@ -38,7 +39,7 @@ if __name__ == "__main__":
     np.random.seed(seed)
     torch.manual_seed(seed)
     
-    results_path = pjoin(args.logdir, args.task_name, args.algo_name, args.exp_id)
+    results_path = pjoin(args.logdir, args.task_name, args.algo_name, args.exp_id, datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
     if not os.path.isdir(results_path):
         os.makedirs(results_path)
         
@@ -54,7 +55,7 @@ if __name__ == "__main__":
     elif args.algo_name == "tr_maml":
         algo = TRMAML(args.task_name, inner_lr=args.inner_lr, meta_lr=args.meta_lr, K=args.K, inner_steps=args.inner_steps, results_path=results_path)
     elif args.algo_name == "taro_maml":
-        p_lr = 0.001
+        p_lr = 0.0001
         algo = TaroMAML(args.task_name, inner_lr=args.inner_lr, meta_lr=args.meta_lr, K=args.K, inner_steps=args.inner_steps, results_path=results_path,
                         p_lr=p_lr)
     elif args.algo_name == "vmaml":
@@ -67,4 +68,4 @@ if __name__ == "__main__":
     
     algo.train(args.num_iterations)
     algo.evaluate(args.num_eval_tasks, K=args.K, n_steps=args.inner_steps, lr=args.inner_lr)
-    algo.plot(args.num_plot_tasks, K=args.K, n_steps=args.inner_steps, lr=args.inner_lr)
+    algo.plot(args.num_plot_tasks, K=args.K, lr=args.inner_lr)
