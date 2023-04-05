@@ -8,7 +8,7 @@ import yaml
 import torch
 import numpy as np
 
-from models.MAML import MAML, TRMAML, TaroMAML, VMAML
+from models.MAML import MAML, TRMAML, TaroMAML, VMAML, iMAML
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -63,6 +63,11 @@ if __name__ == "__main__":
         num_ve_iterations = args.inner_steps
         algo = VMAML(args.task_name, inner_lr=args.inner_lr, meta_lr=args.meta_lr, K=args.K, inner_steps=1, results_path=results_path,
                      radius=radius, num_ve_iterations=num_ve_iterations)
+    elif args.algo_name == "imaml":
+        cg_steps = 5
+        lam = 2.0
+        algo = iMAML(args.task_name, inner_lr=args.inner_lr, meta_lr=args.meta_lr, K=args.K, inner_steps=args.inner_steps, results_path=results_path,
+                     cg_steps=cg_steps, lam=lam)
     else:
         raise NotImplementedError
     

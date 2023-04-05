@@ -1,12 +1,11 @@
 #!/bin/bash
 
 
-for steps in 5; do
-# for steps in 1; do
+# for steps in 5; do
+for steps in 1 5; do
     for k_val in 5 10; do
-    # for k_val in 10; do
-        for algo in "maml" "tr_maml" "taro_maml" "vmaml"; do
-        # for algo in "vmaml"; do
+        # for algo in imaml vmaml tr_maml maml; do
+        for algo in imaml; do
             # create the experiment ID
             exp_id="step_$steps/K_$k_val"
 

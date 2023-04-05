@@ -8,7 +8,7 @@ import torch.optim as optim
 import matplotlib.pyplot as plt
 
 from data.sine import SINE
-from utils import simplex_proj, get_logger
+from utils import simplex_proj, get_logger, cg_solve
 from models.building_blocks import MLP
 
 
@@ -126,7 +126,7 @@ class MAML():
             # print(f"{k}:\t{v:.2f}")
             self.logger.info(f"{k}:\t{v:.2f}")
         np.save(f"{self.results_path}/performance.npy", losses)
-        # torch.save(f"{self.resuls_path}/maml.pt", self.model)
+        torch.save(self.model.state_dict(), f"{self.results_path}/{self}.pt")
     
     def plot(self, num_tasks, K=5, n_steps=5, lr=0.01):
         X, y = self.task.sample_data(batch_size=num_tasks, mode="plot")
@@ -336,3 +336,118 @@ class VMAML(MAML):
     
     def __str__(self):
         return "VariMAML"
+    
+    
+class iMAML(MAML):
+    def __init__(self, task_name, inner_lr, meta_lr, K=5, inner_steps=1, cg_steps=1, lam=1, tasks_per_meta_batch=25, results_path="./results"):
+        super().__init__(task_name, inner_lr, meta_lr, K, inner_steps, tasks_per_meta_batch, results_path)
+
+        self.cg_steps = cg_steps
+        self.lam = lam
+        
+    def inner_loop(self, X, y, temp_weights, compute_loss=False):
+        X_train, X_test = X[:self.K], X[self.K:]
+        y_train, y_test = y[:self.K], y[self.K:]
+    
+        if compute_loss:
+            loss = self.criterion(self.model.parameterised(X_test, temp_weights), y_test)
+        else:
+            for step in range(self.inner_steps):
+                loss = self.criterion(self.model.parameterised(X_train, temp_weights), y_train)
+                regu_loss = 0.0
+                for w in temp_weights:
+                    regu_loss += 0.5 * self.lam * torch.sum(w ** 2)
+                loss += regu_loss
+                
+                # compute grad and update inner loop weights
+                grad = torch.autograd.grad(loss, temp_weights)
+                temp_weights = [w - self.inner_lr * g for w, g in zip(temp_weights, grad)]
+                        
+            loss = 0.0
+            
+        return temp_weights, loss
+    
+    def hessian_vector_product(self, vector, params=None, x=None, y=None):
+        """
+        Performs hessian vector product on the train set in task with the provided vector
+        """
+        if x is not None and y is not None:
+            xt, yt = x[:self.K], y[:self.K]
+        else:
+            raise NotImplementedError
+        if params is not None:
+            self.set_params(params)
+        tloss = self.criterion(self.model(xt), yt)
+        # tloss = self.get_loss(xt, yt)
+        
+        grad_ft = torch.autograd.grad(tloss, self.model.parameters(), create_graph=True)
+        flat_grad = torch.cat([g.contiguous().view(-1) for g in grad_ft])
+        # vec = utils.to_device(vector, self.use_gpu)
+        h = torch.sum(flat_grad * vector)
+        hvp = torch.autograd.grad(h, self.model.parameters())
+        hvp_flat = torch.cat([g.contiguous().view(-1) for g in hvp])
+        return hvp_flat
+    
+    def matrix_evaluator(self, x, y, regu_coef=1.0, lam_damping=10.0):
+        def evaluator(v):
+            hvp = self.hessian_vector_product(v, x=x, y=y)
+            Av = (1.0 + regu_coef) * v + hvp / (self.lam + lam_damping)
+            return Av
+        return evaluator
+    
+    def get_params(self):
+        return torch.cat([param.data.view(-1) for param in self.model.parameters()], 0).clone()
+    
+    def set_params(self, param_vals):
+        offset = 0
+        for param in self.model.parameters():
+            param.data.copy_(param_vals[offset:offset + param.nelement()].view(param.size()))
+            offset += param.nelement()
+            
+    def train(self, num_iterations):
+        losses = []
+        
+        for iteration in range(1, num_iterations+1):
+            
+            # compute meta loss
+            meta_loss = 0.0
+            task_weights_list = [[w.clone() for w in self.weights] for _ in range(self.tasks_per_meta_batch)]
+            batch_X, batch_y = self.task.sample_data(batch_size=self.tasks_per_meta_batch,
+                                                     num_samples=2*self.K, mode="train")
+
+            meta_grad = 0.0
+            for i in range(self.tasks_per_meta_batch):
+                # Obtain task parameters using iterative optimization
+                task_weights, _ = self.inner_loop(batch_X[i], batch_y[i], task_weights_list[i])
+                task_weights_list[i] = task_weights
+                
+                # Compute partial out-level gradient
+                _, loss = self.inner_loop(batch_X[i], batch_y[i], task_weights, compute_loss=True)
+                flat_grad = torch.autograd.grad(loss, task_weights)
+                flat_grad = torch.cat([g.contiguous().view(-1) for g in flat_grad])
+                
+                meta_loss += loss
+                losses.append(loss.item())
+
+                # Use an iterative solver along with reverse mode differentiationto compute task meta-gradient
+                if self.cg_steps == 1:
+                    meta_grad += flat_grad
+                else:
+                    evaluator = self.matrix_evaluator(batch_X[i], batch_y[i])
+                    meta_grad += cg_solve(evaluator, flat_grad, self.cg_steps)
+            meta_grad /= self.tasks_per_meta_batch
+            
+            # assign meta gradient to weights and take optimisation step
+            offset = 0
+            for w in self.weights:
+                this_grad = meta_grad[offset:offset + w.nelement()].view(w.size())
+                # w.grad.copy_(this_grad)
+                w.grad = this_grad
+                offset += w.nelement()
+            self.meta_optimiser.step()
+            
+            # log metrics
+            # epoch_loss.append(meta_loss.item() / self.tasks_per_meta_batch)
+            if iteration % self.print_every == 0:
+                self.train_log(losses, iteration, num_iterations)
+                losses = []
