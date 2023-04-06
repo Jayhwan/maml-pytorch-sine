@@ -2,4 +2,4 @@
 __pycache__
 
 sine
-nohup.out
+*.out
