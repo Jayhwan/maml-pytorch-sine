@@ -451,3 +451,67 @@ class iMAML(MAML):
             if iteration % self.print_every == 0:
                 self.train_log(losses, iteration, num_iterations)
                 losses = []
+
+
+class iMAML_Const(MAML):
+    def __init__(self, task_name, inner_lr, meta_lr, radius=0.05, num_ve_iterations=5,
+                 K=10, inner_steps=1, tasks_per_meta_batch=25, results_path="./results"):
+        super().__init__(task_name, inner_lr, meta_lr, K, inner_steps, tasks_per_meta_batch, results_path)
+
+        self.radius = radius
+        self.num_ve_iterations = num_ve_iterations
+
+    def inner_loop(self, X, y):
+        X_train, X_test = X[:self.K], X[self.K:]
+        y_train, y_test = y[:self.K], y[self.K:]
+
+        temp_weights = [w.clone() for w in self.weights]
+        for step in range(self.num_ve_iterations):
+            loss = self.criterion(self.model.parameterised(X_train, temp_weights), y_train)
+
+            # compute grad and update inner loop weights
+            grad = torch.autograd.grad(loss, temp_weights)
+            temp_weights = [w - self.inner_lr * g for w, g in zip(temp_weights, grad)]
+
+            dist_square = sum(list(map(lambda p: torch.sum(torch.square(p[1] - p[0])), zip(temp_weights, self.weights))))
+
+            d = torch.sqrt(dist_square)
+            r = self.radius
+
+            if d > r:
+                temp_weights = list(map(lambda p: (r*p[0] + (d-r)*p[1])/d, zip(temp_weights, self.weights)))
+
+        loss = self.criterion(self.model.parameterised(X_test, temp_weights), y_test)
+
+        return loss
+
+    def train(self, num_iterations):
+        losses = []
+
+        for iteration in range(1, num_iterations + 1):
+
+            # compute meta loss
+            meta_loss = 0.0
+            batch_X, batch_y = self.task.sample_data(batch_size=self.tasks_per_meta_batch,
+                                                     num_samples=2*self.K, mode="train")
+            for i in range(self.tasks_per_meta_batch):
+                loss = self.inner_loop(batch_X[i], batch_y[i])
+                meta_loss += loss
+                losses.append(loss.item())
+
+            # compute meta gradient of loss with respect to maml weights
+            meta_grads = torch.autograd.grad(meta_loss, self.weights)
+
+            # assign meta gradient to weights and take optimisation step
+            for w, g in zip(self.weights, meta_grads):
+                w.grad = g
+            self.meta_optimiser.step()
+
+            # log metrics
+            # epoch_loss.append(meta_loss.item() / self.tasks_per_meta_batch)
+            if iteration % self.print_every == 0:
+                self.train_log(losses, iteration, num_iterations)
+                losses = []
+
+    def __str__(self):
+        return "iMAML_Const"
