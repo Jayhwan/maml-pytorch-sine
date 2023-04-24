@@ -380,7 +380,7 @@ class iMAML(MAML):
         tloss = self.criterion(self.model(xt), yt)
         # tloss = self.get_loss(xt, yt)
         
-        grad_ft = torch.autograd.grad(tloss, self.model.parameters(), create_graph=True)
+        grad_ft = torch.autograd.grad(tloss, self.model.parameters())
         flat_grad = torch.cat([g.contiguous().view(-1) for g in grad_ft])
         # vec = utils.to_device(vector, self.use_gpu)
         h = torch.sum(flat_grad * vector)
