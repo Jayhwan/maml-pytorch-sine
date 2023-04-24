@@ -1,5 +1,9 @@
-# maml-pytorch
+# VariMAML
 
-A PyTorch reimplementation of MAML, replicating some of the experiments from [Finn et al (2017): Model-Agnostic Meta-Learning for Fast Adaptation of Deep Networks](https://arxiv.org/abs/1703.03400).
+### Installation
+- pyyaml==6.0
+- torch==1.12.1
 
-Currently, MAML-Sines.ipynb reproduces (qualitatively) the supervised learning experiment from the paper, on a distribution of sine wave regression tasks. It is designed to be as simple and clear as possible while replicating the behaviour. 
+## Running Code
+`python main.py --task_name <task_name> --algo_name <algo_name> --exp_id <exp_id>`
+
