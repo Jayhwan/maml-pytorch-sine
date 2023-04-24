@@ -8,7 +8,7 @@ import yaml
 import torch
 import numpy as np
 
-from models.MAML import MAML, TRMAML, TaroMAML, VMAML, iMAML
+from models.MAML import MAML, TRMAML, TaroMAML, VMAML, iMAML, iMAML_Const
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -23,6 +23,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_iterations", type=int, default=70000)
     parser.add_argument("--num_eval_tasks", type=int, default=5000)
     parser.add_argument("--num_plot_tasks", type=int, default=5)
+    parser.add_argument("--radius", type=float, default=0.05)
 
     # Seed
     parser.add_argument("--seed", default=0)
@@ -59,7 +60,7 @@ if __name__ == "__main__":
         algo = TaroMAML(args.task_name, inner_lr=args.inner_lr, meta_lr=args.meta_lr, K=args.K, inner_steps=args.inner_steps, results_path=results_path,
                         p_lr=p_lr)
     elif args.algo_name == "vmaml":
-        radius = 0.05
+        radius = args.radius
         num_ve_iterations = args.inner_steps
         algo = VMAML(args.task_name, inner_lr=args.inner_lr, meta_lr=args.meta_lr, K=args.K, inner_steps=1, results_path=results_path,
                      radius=radius, num_ve_iterations=num_ve_iterations)
@@ -68,6 +69,11 @@ if __name__ == "__main__":
         lam = 2.0
         algo = iMAML(args.task_name, inner_lr=args.inner_lr, meta_lr=args.meta_lr, K=args.K, inner_steps=args.inner_steps, results_path=results_path,
                      cg_steps=cg_steps, lam=lam)
+    elif args.algo_name == "imaml_const":
+        radius = args.radius
+        num_ve_iterations = args.inner_steps
+        algo = iMAML_Const(args.task_name, inner_lr=args.inner_lr, meta_lr=args.meta_lr, K=args.K, inner_steps=1, results_path=results_path,
+                           radius=radius, num_ve_iterations=num_ve_iterations)
     else:
         raise NotImplementedError
     
