@@ -470,7 +470,7 @@ class iMAML_Const(MAML):
             loss = self.criterion(self.model.parameterised(X_train, temp_weights), y_train)
 
             # compute grad and update inner loop weights
-            grad = torch.autograd.grad(loss, temp_weights)
+            grad = torch.autograd.grad(loss, temp_weights, create_graph=True)
             temp_weights = [w - self.inner_lr * g for w, g in zip(temp_weights, grad)]
 
             dist_square = sum(list(map(lambda p: torch.sum(torch.square(p[1] - p[0])), zip(temp_weights, self.weights))))
